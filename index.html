@@ -1149,26 +1149,13 @@ function _refreshRect(){_cachedRect=renderer.domElement.getBoundingClientRect();
 _refreshRect();
 // Keep rect fresh on resize / orientation change
 window.addEventListener('resize',function(){
-  var vvp=window.visualViewport;
-  var vw=vvp?vvp.width:innerWidth,vh=vvp?vvp.height:innerHeight;
-  renderer.setSize(vw,vh);
-  camera.aspect=vw/vh;
-  camera.updateProjectionMatrix();
-  syncOrtho();
-  _refreshRect();
-  markDirty();
+  _syncRenderer();
   if(typeof updateLayoutMode==='function')updateLayoutMode();
 });
 // visualViewport fires in PWA standalone when window.resize doesn't (e.g. Android system bar settle)
 if(window.visualViewport){
   window.visualViewport.addEventListener('resize',function(){
-    var vw=window.visualViewport.width,vh=window.visualViewport.height;
-    renderer.setSize(vw,vh);
-    camera.aspect=vw/vh;
-    camera.updateProjectionMatrix();
-    syncOrtho();
-    _refreshRect();
-    markDirty();
+    _syncRenderer();
     if(typeof updateLayoutMode==='function')updateLayoutMode();
   });
 }
@@ -4129,6 +4116,22 @@ stab.addEventListener('click',function(){
 window._cardDetached=false;
 window._cardHidden=false;
 
+function _syncRenderer(){
+  // Sync renderer canvas size + camera projection to current visualViewport dimensions.
+  // Must be called any time layout changes (not just window resize) — the canvas has
+  // explicit pixel dimensions from renderer.setSize; CSS inset:0 alone does not resize it.
+  // In PWA standalone, narrow<->wide layout switches do not fire a window resize event.
+  var _vvp=window.visualViewport;
+  var vw=_vvp?_vvp.width:window.innerWidth;
+  var vh=_vvp?_vvp.height:window.innerHeight;
+  renderer.setSize(vw,vh);
+  camera.aspect=vw/vh;
+  camera.updateProjectionMatrix();
+  syncOrtho();
+  _refreshRect();
+  markDirty();
+}
+
 function updateLayoutMode(){
   // Use visualViewport when available — gives correct dimensions in PWA standalone
   // before window.innerWidth/Height have settled after launch
@@ -4165,6 +4168,7 @@ function updateLayoutMode(){
       if(fab)fab.classList.add('fab-visible');
     }
     setTimeout(function(){
+      _syncRenderer();
       _fcResizeCanvases();
       var h=pb.getBoundingClientRect().height;
       document.documentElement.style.setProperty('--pb-h',h+'px');
@@ -4182,7 +4186,7 @@ function updateLayoutMode(){
       } else {
         if(fab)fab.classList.add('fab-visible');
       }
-      setTimeout(_fcResizeCanvases,50);
+      setTimeout(function(){_syncRenderer();_fcResizeCanvases();},50);
     } else {
       if(sc)sc.style.display='';
       if(sb)sb.style.display='';
@@ -4192,6 +4196,8 @@ function updateLayoutMode(){
       if(fab)fab.classList.remove('fab-visible');
       window._cardHidden=false;
       document.documentElement.style.setProperty('--pb-h','0px');
+      // Sync renderer after sidecol becomes visible — layout change doesn't fire resize in PWA
+      setTimeout(_syncRenderer,50);
     }
   }
 }
